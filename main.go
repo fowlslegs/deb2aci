@@ -151,7 +151,17 @@ func download(pkg, dir string, done map[string]*deb) error {
 	os.Chdir(tdir)
 
 	err = run(exec.Command("apt-get", "download", pkg))
-	if err != nil {
+	if strings.HasSuffix(err, "no candidate \n") {
+		err = downloadReverseProvides(pkg)
+		// Look for specific error related to reading past end of Reader to make
+		// more granular error reporting
+		if err != nil {
+			return fmt.Sprintf("E: Can't select candidate version from package %v as"+
+				"it has no candidate", pkg)
+		} else {
+			return nil
+		}
+	} else if err != nil {
 		return err
 	}
 
@@ -197,6 +207,30 @@ func download(pkg, dir string, done map[string]*deb) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func downloadReverseProvides(pkg string) error {
+	cmd := exec.Command("apt-cache", "showpkg", pkg)
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	buffer := bytes.NewBuffer(output)
+	for !bytes.Equal(output, []byte("Reverse Provides: \n")) {
+		output, err = buffer.ReadBytes('\n')
+		if err != nil {
+			return err
+		}
+	}
+	rprovider, err = buffer.ReadBytes(' ')
+	if err != nil {
+		return err
+	}
+	download(rprovider)
+	if err != nil {
+		return err
 	}
 	return nil
 }
