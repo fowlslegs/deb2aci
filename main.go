@@ -152,18 +152,16 @@ func download(pkg, dir string, done map[string]*deb) error {
 	os.Chdir(tdir)
 
 	err = run(exec.Command("apt-get", "download", pkg))
-	if strings.HasSuffix(err.Error(), "no candidate \n") {
+	if err != nil {
+		// if strings.HasSuffix(err.Error(), "no candidate \n") {
 		err = downloadReverseProvides(pkg, dir, done)
-		// Look for specific error related to reading past end of Reader to make
-		// more granular error reporting
 		if err != nil {
 			return err
-		} else {
-			return nil
 		}
-	} else if err != nil {
-		return err
+		return nil
 	}
+	// return err
+	// }
 
 	matches, err := filepath.Glob(filepath.Join(tdir, "*.deb"))
 	if err != nil || len(matches) != 1 {
