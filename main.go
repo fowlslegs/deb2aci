@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -151,13 +152,12 @@ func download(pkg, dir string, done map[string]*deb) error {
 	os.Chdir(tdir)
 
 	err = run(exec.Command("apt-get", "download", pkg))
-	if strings.HasSuffix(err, "no candidate \n") {
-		err = downloadReverseProvides(pkg)
+	if strings.HasSuffix(err.Error(), "no candidate \n") {
+		err = downloadReverseProvides(pkg, dir, done)
 		// Look for specific error related to reading past end of Reader to make
 		// more granular error reporting
 		if err != nil {
-			return fmt.Sprintf("E: Can't select candidate version from package %v as"+
-				"it has no candidate", pkg)
+			return err
 		} else {
 			return nil
 		}
@@ -211,7 +211,7 @@ func download(pkg, dir string, done map[string]*deb) error {
 	return nil
 }
 
-func downloadReverseProvides(pkg string) error {
+func downloadReverseProvides(pkg, dir string, done map[string]*deb) error {
 	cmd := exec.Command("apt-cache", "showpkg", pkg)
 	output, err := cmd.Output()
 	if err != nil {
@@ -224,11 +224,11 @@ func downloadReverseProvides(pkg string) error {
 			return err
 		}
 	}
-	rprovider, err = buffer.ReadBytes(' ')
+	rprovider, err := buffer.ReadBytes(' ')
 	if err != nil {
 		return err
 	}
-	download(rprovider)
+	download(string(rprovider[:]), dir, done)
 	if err != nil {
 		return err
 	}
