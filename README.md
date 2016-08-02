@@ -26,3 +26,7 @@ The image manifest will keep track of what packages are part of it:
 ]
 ```
 
+## Requirements
+
+* go >= 1.3
+* actool
