@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -152,8 +153,15 @@ func download(pkg, dir string, done map[string]*deb) error {
 
 	err = run(exec.Command("apt-get", "download", pkg))
 	if err != nil {
-		return err
+		// if strings.HasSuffix(err.Error(), "no candidate \n") {
+		err = downloadReverseProvides(pkg, dir, done)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
+	// return err
+	// }
 
 	matches, err := filepath.Glob(filepath.Join(tdir, "*.deb"))
 	if err != nil || len(matches) != 1 {
@@ -197,6 +205,30 @@ func download(pkg, dir string, done map[string]*deb) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func downloadReverseProvides(pkg, dir string, done map[string]*deb) error {
+	cmd := exec.Command("apt-cache", "showpkg", pkg)
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	buffer := bytes.NewBuffer(output)
+	for !bytes.Equal(output, []byte("Reverse Provides: \n")) {
+		output, err = buffer.ReadBytes('\n')
+		if err != nil {
+			return err
+		}
+	}
+	rprovider, err := buffer.ReadBytes(' ')
+	if err != nil {
+		return err
+	}
+	download(string(rprovider[:]), dir, done)
+	if err != nil {
+		return err
 	}
 	return nil
 }
