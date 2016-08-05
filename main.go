@@ -107,11 +107,17 @@ func createACI(dir string, fs map[string]*deb, image string, m *schema.ImageMani
 	rootfs := filepath.Join(idir, "rootfs")
 	os.MkdirAll(rootfs, 0755)
 
+	dpkgInstallCmd := make([]string, len(fs)+3)
+	dpkgInstallCmd[0] = "dpkg"
+	dpkgInstallCmd[1] = "-i"
+	ctr := 2
 	for _, d := range fs {
-		err := run(exec.Command("cp", "-a", d.Path+"/.", rootfs))
-		if err != nil {
-			return err
-		}
+		dpkgInstallCmd[ctr] = d.Path
+		ctr += 1
+		// err := run(exec.Command("cp", "-a", d.Path+"/.", rootfs))
+		// if err != nil {
+		// 	return err
+		// }
 		i, err := types.SanitizeACIdentifier(
 			fmt.Sprintf("debian.org/deb/%v", d.Name))
 		if err != nil {
@@ -124,6 +130,13 @@ func createACI(dir string, fs map[string]*deb, image string, m *schema.ImageMani
 		m.Annotations.Set(
 			*a, fmt.Sprintf("%v/%v", d.Arch, d.Version))
 	}
+	cmd := exec.Command("sudo", dpkgInstallCmd...)
+	cmd.Env = []string{fmt.Sprintf("DPKG_ROOT=%v", rootfs), fmt.Sprintf("PATH=%v", os.Getenv("PATH"))}
+	err = run(cmd)
+	if err != nil {
+		return err
+	}
+
 	bytes, err := m.MarshalJSON()
 	if err != nil {
 		return errorf(err.Error())
@@ -167,33 +180,27 @@ func download(pkg, dir string, done map[string]*deb) error {
 	if err != nil || len(matches) != 1 {
 		return errorf("unexpected: %v %v", err, matches)
 	}
-	debName := matches[0]
-	// now unpack the archive to the folder
-	err = run(exec.Command(
-		"dpkg-deb", "-x", debName, filepath.Join(tdir, "out")))
+	debPath := matches[0]
+
+	arch, err := output("dpkg-deb", "-f", debPath, "Architecture")
 	if err != nil {
 		return err
 	}
 
-	arch, err := output("dpkg-deb", "-f", debName, "Architecture")
-	if err != nil {
-		return err
-	}
-
-	ver, err := output("dpkg-deb", "-f", debName, "Version")
+	ver, err := output("dpkg-deb", "-f", debPath, "Version")
 	if err != nil {
 		return err
 	}
 
 	done[pkg] = &deb{
 		Name:    pkg,
-		Path:    filepath.Join(tdir, "out"),
+		Path:    debPath,
 		Arch:    arch,
 		Version: ver,
 	}
 
 	// now list all dependencies
-	out, err := output("dpkg-deb", "-f", debName, "Depends")
+	out, err := output("dpkg-deb", "-f", debPath, "Depends")
 	if err != nil {
 		return err
 	}
